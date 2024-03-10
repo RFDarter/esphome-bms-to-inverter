@@ -1,0 +1,26 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "C:/Users/Matt/Documents/Git/esphome-jk-bms/**",
+                "C:/Users/Matt/Documents/Git/esphome/**",
+                "C:/Users/Matt/Documents/Git/esphome",
+                "C:/Users/Matt/Documents/Git/esphome-jk-bms",
+                "C:/Users/Matt/.platformio/packages/**"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "windowsSdkVersion": "10.0.22621.0",
+            "compilerPath": "cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64"
+        }
+    ],
+    "version": 4
+}
