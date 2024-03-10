@@ -180,6 +180,7 @@ void BmsToInverter::log_bms_data_() {
   ESP_LOGD(TAG, "Max Cell Voltage: %f", this->bms_data_.max_cell_voltage);
   ESP_LOGD(TAG, "Min Temperatur: %f", this->bms_data_.min_temperatur);
   ESP_LOGD(TAG, "Max Temperatur: %f", this->bms_data_.max_temperatur);
+  ESP_LOGD(TAG, "Cell Count: %f", this->bms_data_.cell_count);
   ESP_LOGD(TAG, "Charge Request: %s", this->bms_data_.charge_request ? "yes" : "no");
   ESP_LOGD(TAG, "Is Bms Connected: %s", this->bms_data_.is_bms_connected ? "yes" : "no");
 }

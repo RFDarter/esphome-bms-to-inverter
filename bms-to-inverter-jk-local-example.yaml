@@ -21,7 +21,9 @@ esp32:
 external_components:
   - source: ${external_components_source}
     refresh: 0s
-  - source: ${external_components_source_2}
+  - source:
+      type: local
+      path: 'C:\Users\Matt\Documents\Git\rfdarter-github\esphome-bms-to-inverter\components'
     refresh: 0s
 
 wifi:
@@ -56,10 +58,6 @@ mqtt:
   # username: !secret mqtt_username
   # password: !secret mqtt_password
   id: mqtt_client
-
-web_server:
-  js_include: "www.js"
-  js_url: ""
 
 # api:
 

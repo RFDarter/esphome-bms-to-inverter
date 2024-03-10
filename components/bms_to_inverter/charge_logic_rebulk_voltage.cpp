@@ -65,17 +65,21 @@ void ChargeLogicRebulkVoltage::update_charge_logic_values(ChargeLogicValues *cha
         this->change_charge_status(CHARGE_STATUS_ABSORBTION);
       }
       break;
-    case CHARGE_STATUS_ABSORBTION:
+    case CHARGE_STATUS_ABSORBTION: {
       charge_logic_values->charge_voltage = this->parent_->user_control_values_.charge_voltage;
       charge_logic_values->max_charge_current = this->parent_->user_control_values_.max_charge_current;
       charge_logic_values->max_discharge_current = this->parent_->user_control_values_.max_discharge_current;
-
+      float time_left = round(((this->parent_->user_control_values_.absorbtion_time * 3600 * 1000) -
+                               (millis() - this->timestamp_started_absorbtion_)) /
+                              1000);
+      ESP_LOGI(TAG, "Time left to absorb in seconds: %f", time_left);
       // We hit target absorbtion time,switch to float
       if ((millis() - this->timestamp_started_absorbtion_) >=
           (this->parent_->user_control_values_.absorbtion_time * 3600 * 1000)) {
         this->change_charge_status(CHARGE_STATUS_FLOAT);
       }
       break;
+    }
     case CHARGE_STATUS_FLOAT:
       charge_logic_values->charge_voltage = this->parent_->user_control_values_.float_voltage;
       charge_logic_values->max_charge_current = this->parent_->user_control_values_.max_charge_current;
@@ -90,7 +94,7 @@ void ChargeLogicRebulkVoltage::update_charge_logic_values(ChargeLogicValues *cha
 }
 
 bool ChargeLogicRebulkVoltage::are_essential_values_present() {
-  return (std::isnan(this->parent_->bms_data_.voltage) || std::isnan(this->parent_->bms_data_.cell_count));
+  return !(std::isnan(this->parent_->bms_data_.voltage) || std::isnan(this->parent_->bms_data_.cell_count));
 }
 
 }  // namespace bms_to_inverter
