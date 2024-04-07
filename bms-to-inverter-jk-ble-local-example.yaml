@@ -69,8 +69,9 @@ mqtt:
   id: JK_Battery
 
 web_server:
-  js_include: "www.js"
-  js_url: ""
+  js_url: https://deploy-preview-66--esphome-webserver.netlify.app/v3/www.js
+  # js_include: "www.js"
+  # js_url: ""
 
 captive_portal:
 
@@ -112,6 +113,20 @@ bms_to_inverter:
       # mqtt_topic: "enphase/battery"
       type: can
       canbus_id: canbus0
+button:
+  - platform: template
+    name: Set Internal True
+    entity_category: config
+    on_press:
+      lambda: |-
+        id(test_text).set_internal(true);
+
+  - platform: template
+    name: Set Internal False
+    entity_category: config
+    on_press:
+      lambda: |-
+        id(test_text).set_internal(false);
 
 select:
   - platform: bms_to_inverter
@@ -119,8 +134,18 @@ select:
       name: "Debug Charge Status"
     user_charge_logic:
       name: "1. Charge Logic"
+    user_can_protocol:
+      name: "2. Can Protocol"
 
 text:
+  - platform: template
+    id: test_text
+    name: Test Text
+    mode: text
+    optimistic: True
+    initial_value: "looool"
+    entity_category: config
+
   - platform: bms_to_inverter
     user_battery_name:
       name: "${name} Inverter Battery Name"
@@ -141,20 +166,24 @@ binary_sensor:
 number:
   - platform: bms_to_inverter
     user_charge_voltage:
-      name: "2. Requested Charge Voltage"
+      name: "3. Requested Charge Voltage"
+      mode: slider
     user_float_voltage:
-      name: "3. Requested Float Voltage"
+      name: "4. Requested Float Voltage"
+      mode: slider
     user_rebulk_voltage:
-      name: "4. Rebulk Voltage"
+      name: "5. Rebulk Voltage"
+      mode: slider
     user_max_charge_current:
-      name: "5. Max Charge Current"
+      name: "6. Max Charge Current"
+      mode: slider
       max_value: 600.0 # min and max values can be changed
     user_max_discharge_current:
-      name: "6. Max Discharge Current"
+      name: "7. Max Discharge Current"
     user_absorbtion_time:
-      name: "7. Absorbtion Time"
+      name: "8. Absorbtion Time"
     user_float_time:
-      name: "8. Float Time"
+      name: "9. Float Time"
 
   - platform: jk_bms_ble
     jk_bms_ble_id: bms0

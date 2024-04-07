@@ -4,7 +4,7 @@
 
 // #define USE_ESP32  // just so fix intelisens
 // #include "esphome/components/mqtt/custom_mqtt_device.h"
-#include "sma_can.h"
+#include "can.h"
 #include "esphome/components/canbus/canbus.h"
 #include "esphome/components/number/number.h"
 #include "esphome/components/select/select.h"
@@ -42,6 +42,13 @@ namespace bms_to_inverter {
 #define BATTERY_MAX_CYCLES 6000.0
 #define SOFTWARE_VERSION 1.0
 #define HARDWARE_VERSION 1.0
+
+enum CanProtocol {
+  CAN_PROTOCOL_PYLON_1_2,
+  CAN_PROTOCOL_PYLON_PLUS,
+  CAN_PROTOCOL_SMA,
+  CAN_PROTOCOL_VICTRON,
+};
 
 enum InverterType {
   INVERTER_TYPE_GENERIC,
@@ -91,8 +98,7 @@ struct BmsData {
   float charge_cycles;
   bool is_bms_connected;
   float cell_count;
-  uint32_t errors_bitmask;
-  /* according to the can protocol these are the error bits
+  /* Sma style
     Bit 0
     00000100 high voltage
     00010000 low voltage
@@ -108,6 +114,7 @@ struct BmsData {
     00010000 short circute
     01000000 bms internal
     */
+  uint32_t errors_bitmask;
 };
 
 // Conatins the values the user can provide. the voltages will be set to match the cell count
@@ -180,6 +187,9 @@ class BmsToInverter : public PollingComponent {
   void set_user_charge_logic_select(select::Select *user_charge_logic_select) {
     this->user_charge_logic_select_ = user_charge_logic_select;
   }
+  void set_user_can_protocol_select(select::Select *user_can_protocol_select) {
+    this->user_can_protocol_select_ = user_can_protocol_select;
+  }
 
   void set_charge_status_text_sensor(text_sensor::TextSensor *charge_status_text_sensor) {
     this->charge_status_text_sensor_ = charge_status_text_sensor;
@@ -215,6 +225,7 @@ class BmsToInverter : public PollingComponent {
   number::Number *user_max_discharge_current_number_{nullptr};
   text::Text *user_battery_name_text_{nullptr};
   select::Select *user_charge_logic_select_{nullptr};
+  select::Select *user_can_protocol_select_{nullptr};
   text_sensor::TextSensor *charge_status_text_sensor_{nullptr};
 
   /**==============================
@@ -225,13 +236,16 @@ class BmsToInverter : public PollingComponent {
   /**==============================
    * Charge logic
    ================================*/
-  ChargeLogic *charge_logics_[2]{nullptr};
+  // ChargeLogic *charge_logics_[2]{nullptr};
+  std::vector<ChargeLogic *> charge_logics_;
   ChargeLogic *active_charge_logic_{nullptr};
 
   BmsData bms_data_{};
   ChargeLogicValues charge_logic_values_{};
   DataToSendToInverter aggregated_data_;
   UserControlValues user_control_values_{};
+  CanProtocol can_protocol_{CAN_PROTOCOL_PYLON_1_2};
+
   /**Each implementation would need to gather bms data and update 'this->bms_data'
    * unused or values that are not privided by the bms would ndeed to the set to 'NAN'
    */
@@ -245,9 +259,21 @@ class BmsToInverter : public PollingComponent {
   void send_frame_0x0355_();
   void send_frame_0x0356_();
   void send_frame_0x035a_();
+  void send_frame_0x035C_();
   void send_frame_0x035e_();
-  void send_frame_0x035f_();
+  void send_frame_sma_0x035f_();
+  void send_frame_victron_0x035f_();
+  void send_frame_0x0359_();
+  void send_frame_0x070_();
+  void send_frame_0x0371_();
+  void send_frame_0x0372_();
   void send_frame_0x0373_();
+  void send_frame_0x0374_();
+  void send_frame_0x0375_();
+  void send_frame_0x0376_();
+  void send_frame_0x0377_();
+  void send_frame_0x0379_();
+  void send_frame_0x0382_();
 
   void version_to_2_byte_array_(float ver, uint8_t *ver_as_byte, uint8_t dec_places = 1);
 

@@ -67,8 +67,7 @@ mqtt:
   id: JK_Battery
 
 web_server:
-  js_include: "www.js"
-  js_url: ""
+  js_url: "https://deploy-preview-66--esphome-webserver.netlify.app/v3/www.js"
 
 captive_portal:
 

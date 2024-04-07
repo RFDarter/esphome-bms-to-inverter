@@ -12,10 +12,30 @@ BmsToInverter::BmsToInverter() {}
 void BmsToInverter::dump_config() {}
 
 void BmsToInverter::setup() {
-  this->charge_logics_[0] = new ChargeLogicRebulkVoltage(this);
-  this->charge_logics_[1] = new ChargeLogicRebulkVoltage(this);
-  this->active_charge_logic_ = this->charge_logics_[0];
-  this->active_charge_logic_->change_charge_status(CHARGE_STATUS_WAIT);
+  // this->charge_logics_[0] = new ChargeLogicRebulkVoltage(this);
+  // this->charge_logics_[1] = new ChargeLogicRebulkVoltage(this);
+  // this->active_charge_logic_ = this->charge_logics_[0];
+  // this->active_charge_logic_->change_charge_status(CHARGE_STATUS_WAIT);
+  charge_logics_.push_back(new ChargeLogicRebulkVoltage(this));
+  charge_logics_.push_back(new ChargeLogicRebulkVoltage(this));
+  charge_logics_.push_back(new ChargeLogicRebulkVoltage(this));
+  charge_logics_.push_back(new ChargeLogicRebulkVoltage(this));
+
+  this->active_charge_logic_ = charge_logics_.at(0);
+
+  if (this->user_charge_logic_select_ != nullptr) {
+    this->user_charge_logic_select_->add_on_state_callback(
+        [this](std::string text, size_t length) { this->active_charge_logic_ = this->charge_logics_.at(length); });
+    // needed bc state is allready published befor we could add our on state callback
+    this->active_charge_logic_ = this->charge_logics_.at(this->user_charge_logic_select_->active_index().value());
+  }
+
+  if (this->user_can_protocol_select_ != nullptr) {
+    this->user_can_protocol_select_->add_on_state_callback(
+        [this](std::string text, size_t length) { this->can_protocol_ = CanProtocol(length); });
+    // needed bc state is allready published befor we could add our on state callback
+    this->can_protocol_ = CanProtocol(this->user_can_protocol_select_->active_index().value());
+  }
 }
 
 void BmsToInverter::update_user_control_values_() {
@@ -109,11 +129,10 @@ void BmsToInverter::update() {
   this->update_bms_data(&this->bms_data_);
   this->update_user_control_values_();
 
-  if (this->active_charge_logic_->are_essential_values_present()) {
-    this->active_charge_logic_->update_charge_logic_values(&this->charge_logic_values_);
-  } else {
+  if (!this->active_charge_logic_->are_essential_values_present()) {
     ESP_LOGW(TAG, "Not all values are provided to update the charge logic!");
   }
+  this->active_charge_logic_->update_charge_logic_values(&this->charge_logic_values_);
 
   // TODO aggregate values with slaves!!
   this->aggregated_data_.bms_data = this->bms_data_;
@@ -124,6 +143,20 @@ void BmsToInverter::update() {
   this->log_user_control_values_();
   this->log_charge_logic_values_();
   this->log_aggregated_values_();
+
+  // Debug Logs
+  if (this->user_can_protocol_select_ != nullptr) {
+    ESP_LOGD(TAG, "Selected can protocol is: %s(%d)", this->user_can_protocol_select_->state.c_str(),
+             this->can_protocol_);
+  } else {
+    ESP_LOGD(TAG, "Can protocol select == nullptr");
+  }
+
+  if (this->user_charge_logic_select_ != nullptr) {
+    ESP_LOGD(TAG, "Selected charge logic is: %s", this->user_charge_logic_select_->state.c_str());
+  } else {
+    ESP_LOGD(TAG, "Charge logic select == nullptr");
+  }
 
   ESP_LOGI(TAG, "%s", this->bms_data_.is_bms_connected ? "Bms is connected" : "Bms is not connected");
 
@@ -283,17 +316,64 @@ void BmsToInverter::send_mqtt_message_to_inverter() {
 }
 
 void BmsToInverter::send_can_message_to_inverter() {
-  this->send_frame_0x0351_();
-  this->send_frame_0x0355_();
-  this->send_frame_0x0356_();
-  this->send_frame_0x035a_();
-  this->send_frame_0x035e_();
-  this->send_frame_0x035f_();
-  this->send_frame_0x0373_();
+  switch (this->can_protocol_) {
+    case CAN_PROTOCOL_PYLON_1_2:
+      this->send_frame_0x0359_();
+      this->send_frame_0x0351_();
+      this->send_frame_0x0355_();
+      this->send_frame_0x0356_();
+      this->send_frame_0x035C_();
+      this->send_frame_0x070_();
+      this->send_frame_0x0371_();
+      this->send_frame_0x035e_();
+      break;
+    case CAN_PROTOCOL_PYLON_PLUS:
+      this->send_frame_0x0359_();
+      this->send_frame_0x0351_();
+      this->send_frame_0x0355_();
+      this->send_frame_0x0356_();
+      this->send_frame_0x035C_();
+      this->send_frame_0x070_();
+      this->send_frame_0x0371_();
+      this->send_frame_0x0379_();
+      this->send_frame_0x035e_();
+      break;
+    case CAN_PROTOCOL_SMA:
+      this->send_frame_0x035a_();
+      this->send_frame_0x0351_();
+      this->send_frame_0x0355_();
+      this->send_frame_0x0356_();
+      this->send_frame_0x035e_();
+      this->send_frame_sma_0x035f_();
+      this->send_frame_0x035e_();
+      break;
+    case CAN_PROTOCOL_VICTRON:
+      this->send_frame_0x035a_();
+      this->send_frame_0x0351_();
+      this->send_frame_0x0355_();
+      this->send_frame_0x0356_();
+      this->send_frame_0x0372_();
+      this->send_frame_0x0373_();
+      this->send_frame_0x0374_();
+      this->send_frame_0x0379_();  // sure?
+      this->send_frame_0x0382_();
+      this->send_frame_victron_0x035f_();
+      this->send_frame_0x035e_();
+      break;
+  }
+
+  // this->send_frame_0x0351_();
+  // this->send_frame_0x0355_();
+  // this->send_frame_0x0356_();
+  // this->send_frame_0x035a_();
+  // this->send_frame_0x035e_();
+  // this->send_frame_0x035f_();
+  // this->send_frame_0x0373_();
 }
+// Pylon 1.2 | Pylon + | SMA | Victron
 // Chargevoltage / MaxChargeCurrent / MaxDischargeCurrent
 void BmsToInverter::send_frame_0x0351_() {
-  static SmaCanMessage0x0351 message;
+  static CanMessage0x0351 message;
 
   if (std::isnan(this->aggregated_data_.charge_logic_values.charge_voltage) ||
       std::isnan(this->aggregated_data_.charge_logic_values.max_charge_current) ||
@@ -313,9 +393,10 @@ void BmsToInverter::send_frame_0x0351_() {
   auto *ptr = reinterpret_cast<uint8_t *>(&message);
   this->canbus_->send_data(0x0351, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
 }
+// Pylon 1.2 | Pylon + | SMA | Victron
 // soc / soh
 void BmsToInverter::send_frame_0x0355_() {
-  static SmaCanMessage0x0355 message;
+  static CanMessage0x0355 message;
 
   if (std::isnan(this->aggregated_data_.bms_data.state_of_charge) ||
       std::isnan(this->aggregated_data_.bms_data.state_of_health)) {
@@ -330,9 +411,10 @@ void BmsToInverter::send_frame_0x0355_() {
   auto *ptr = reinterpret_cast<uint8_t *>(&message);
   this->canbus_->send_data(0x0355, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
 }
+// Pylon 1.2 | Pylon + | SMA | Victron
 // voltage / curent / temperatur
 void BmsToInverter::send_frame_0x0356_() {
-  static SmaCanMessage0x0356 message;
+  static CanMessage0x0356 message;
 
   if (std::isnan(this->aggregated_data_.bms_data.voltage) || std::isnan(this->aggregated_data_.bms_data.current) ||
       std::isnan(this->aggregated_data_.bms_data.temperatur)) {
@@ -343,29 +425,49 @@ void BmsToInverter::send_frame_0x0356_() {
   message.BatteryVoltage = (this->aggregated_data_.bms_data.voltage * 100.0f);        // V
   message.BatteryCurrent = (this->aggregated_data_.bms_data.current * 10.0f);         // A
   message.BatteryTemperature = (this->aggregated_data_.bms_data.temperatur * 10.0f);  // °C
+  message.ChargeCycles = this->aggregated_data_.bms_data.charge_cycles;
 
   auto *ptr = reinterpret_cast<uint8_t *>(&message);
   this->canbus_->send_data(0x0356, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
 }
+// SMA | Victron
 // alarm
 void BmsToInverter::send_frame_0x035a_() {
-  static SmaCanMessage0x035A message;
+  static CanMessage0x035A message;
   message.AlarmBitmask = this->aggregated_data_.bms_data.errors_bitmask;
 
   auto *ptr = reinterpret_cast<uint8_t *>(&message);
   this->canbus_->send_data(0x035A, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
 }
+// Pylon 1.2 | Pylon +
+// Request Bitmap
+void BmsToInverter::send_frame_0x035C_() {
+  static CanMessage0x035C message;
+  if (std::isnan(this->aggregated_data_.bms_data.allow_charge) ||
+      std::isnan(this->aggregated_data_.bms_data.allow_discharge)) {
+    ESP_LOGW(TAG, "Not all sensors are available. Unable to populate 0x035C frame. Skipped");
+    return;
+  }
+  message.RequestBitmask = 0;
+  message.RequestBitmask |= this->aggregated_data_.bms_data.allow_charge ? 0x80 : 0;
+  message.RequestBitmask |= this->aggregated_data_.bms_data.allow_discharge ? 0x40 : 0;
+
+  auto *ptr = reinterpret_cast<uint8_t *>(&message);
+  this->canbus_->send_data(0x035C, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
+}
+// SMA | Pylon 1.2 | Pylonn + | Victron
 // model name
 void BmsToInverter::send_frame_0x035e_() {
-  static SmaCanMessage0x035E message;
+  static CanMessage0x035E message;
   memcpy(message.Model, this->aggregated_data_.user_control_values.name.c_str(), 8);
 
   auto *ptr = reinterpret_cast<uint8_t *>(&message);
   this->canbus_->send_data(0x035E, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
 }
+// SMA
 // chemistry / hardware version / software version / capacity
-void BmsToInverter::send_frame_0x035f_() {
-  static SmaCanMessage0x035F message;
+void BmsToInverter::send_frame_sma_0x035f_() {
+  static CanMessageSma0x035F message;
 
   uint16_t cell_chemistry = 0;
   uint8_t hardware_version[] = {0, 0};  // displayed by victron under device as firmware version
@@ -389,9 +491,104 @@ void BmsToInverter::send_frame_0x035f_() {
   auto *ptr = reinterpret_cast<uint8_t *>(&message);
   this->canbus_->send_data(0x035F, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
 }
+// Victron
+// chemistry / hardware version / software version / capacity
+void BmsToInverter::send_frame_victron_0x035f_() {
+  static CanMessageVictron0x035F message;
+
+  uint8_t hardware_version[] = {0, 0};  // displayed by victron under device as firmware version
+  uint8_t software_version[] = {0, 0};
+
+  version_to_2_byte_array_(HARDWARE_VERSION, hardware_version);
+  version_to_2_byte_array_(SOFTWARE_VERSION, software_version);
+
+  if (std::isnan(this->aggregated_data_.bms_data.total_capacity)) {
+    ESP_LOGW(TAG, "One of the required sensor states is NaN. Unable to populate 0x035f frame. Skipped");
+    return;
+  }
+  message.ProductId = 0;
+  message.HardwareVersion[0] = hardware_version[0];
+  message.HardwareVersion[1] = hardware_version[1];
+  message.SoftwareVersion[0] = software_version[0];
+  message.SoftwareVersion[1] = software_version[1];
+  message.NominalCapacity = (uint16_t) this->aggregated_data_.bms_data.total_capacity;
+
+  auto *ptr = reinterpret_cast<uint8_t *>(&message);
+  this->canbus_->send_data(0x035F, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
+}
+// Pylon 1.2 | Pylon +
+// Alarm
+void BmsToInverter::send_frame_0x0359_() {
+  static CanMessage0x0359 message;
+  message.AlarmBitmask |= this->aggregated_data_.bms_data.errors_bitmask & 0x04 ? 0x02 : 0x00;    // high voltage
+  message.AlarmBitmask |= this->aggregated_data_.bms_data.errors_bitmask & 0x10 ? 0x04 : 0x00;    // low voltage
+  message.AlarmBitmask |= this->aggregated_data_.bms_data.errors_bitmask & 0x40 ? 0x08 : 0x00;    // high temp
+  message.AlarmBitmask |= this->aggregated_data_.bms_data.errors_bitmask & 0x0100 ? 0x10 : 0x00;  // low temp
+  message.AlarmBitmask |=
+      this->aggregated_data_.bms_data.errors_bitmask & 0x010000 ? 0x40 : 0x00;  // high charge current
+  message.AlarmBitmask |=
+      this->aggregated_data_.bms_data.errors_bitmask & 0x4000 ? 0x0100 : 0x00;  // high discharge current
+  message.AlarmBitmask |=
+      this->aggregated_data_.bms_data.errors_bitmask & 0x5400 ? 0x0800 : 0x00;  // etc -> internal bms alarm
+
+  auto *ptr = reinterpret_cast<uint8_t *>(&message);
+  this->canbus_->send_data(0x0359, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
+}
+// Pylon 1.2 | Pylon +
+// min cell voltage / max cell voltage / min temp / max temp
+void BmsToInverter::send_frame_0x070_() {
+  static CanMessage0x070 message;
+  if (std::isnan(this->aggregated_data_.bms_data.min_cell_voltage) ||
+      std::isnan(this->aggregated_data_.bms_data.max_cell_voltage) ||
+      std::isnan(this->aggregated_data_.bms_data.min_temperatur) ||
+      std::isnan(this->aggregated_data_.bms_data.max_temperatur)) {
+    ESP_LOGW(TAG, "Not all sensors are available. Unable to populate 0x070 frame. Skipped");
+    return;
+  }
+  message.MinCellVoltage = this->aggregated_data_.bms_data.min_cell_voltage * 100.0f;
+  message.MaxCellVoltage = this->aggregated_data_.bms_data.max_cell_voltage * 100.0f;
+  message.MinTemperature = this->aggregated_data_.bms_data.min_temperatur * 10.0f;
+  message.MaxTemperature = this->aggregated_data_.bms_data.max_temperatur * 10.0f;
+
+  auto *ptr = reinterpret_cast<uint8_t *>(&message);
+  this->canbus_->send_data(0x070, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
+}
+// Pylon 1.2 | Pylon +
+// min voltage cell id / max voltage cell id / min temp sensor id/ max temp sensor id
+void BmsToInverter::send_frame_0x0371_() {
+  static CanMessage0x0371 message;
+
+  if (std::isnan(this->aggregated_data_.bms_data.min_voltage_cell) ||
+      std::isnan(this->aggregated_data_.bms_data.max_voltage_cell)) {
+    ESP_LOGW(TAG, "Not all sensors are available. Unable to populate 0x0371 frame. Skipped");
+    return;
+  }
+  message.MinVoltageCellId = this->aggregated_data_.bms_data.min_voltage_cell;
+  message.MaxVoltageCellId = this->aggregated_data_.bms_data.max_voltage_cell;
+  message.MinTemperaturSensorId = 1;  // set temperature sensor id to 1
+  message.MaxTemperaturSensorId = 1;  // set temperature sensor id to 1
+
+  auto *ptr = reinterpret_cast<uint8_t *>(&message);
+  this->canbus_->send_data(0x0371, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
+}
+// Victron
+// battery modules count / modules block charing count / modules block discharging count / modules offline count
+void BmsToInverter::send_frame_0x0372_() {
+  static CanMessage0x0372 message;
+
+  // TODO take slaves into account
+  message.BatteryModulesBlockChargingCount = 0;
+  message.BatteryModulesBlockDischargingCount = 0;
+  message.BatteryModulesCount = 1;
+  message.BatteryModulesOfflineCount = 0;
+
+  auto *ptr = reinterpret_cast<uint8_t *>(&message);
+  this->canbus_->send_data(0x0372, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
+}
+// Victron
 // min cell voltage / max cell voltage / min temp / max temp
 void BmsToInverter::send_frame_0x0373_() {
-  static SmaCanMessage0x0373 message;
+  static CanMessage0x0373 message;
 
   if (std::isnan(this->aggregated_data_.bms_data.min_cell_voltage) ||
       std::isnan(this->aggregated_data_.bms_data.max_cell_voltage) ||
@@ -408,15 +605,91 @@ void BmsToInverter::send_frame_0x0373_() {
   auto *ptr = reinterpret_cast<uint8_t *>(&message);
   this->canbus_->send_data(0x0373, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
 }
+// Victron
+// min voltage cell id
+void BmsToInverter::send_frame_0x0374_() {
+  static CanMessage0x0374 message{};
 
-// void BmsToInverter::send_frame_0x0380_() {
-//   static venus_os_bms::SmaCanMessage0x0380 message;
-//   // struct SmaCanMessage0x0380 {
-//   //   uint8_t BatteryCount;   // number off batterys connnected
-//   //   uint8_t CellcOUNT;      // number off cells per battery
-//   //   uint8_t ParallelCount;  // number off batterys connnected parallel
-//   //   uint8_t SerielCount;    // number off batterys connnected in series
-//   // };
+  if (std::isnan(this->aggregated_data_.bms_data.min_voltage_cell)) {
+    ESP_LOGW(TAG, "Not all sensors are available. Unable to populate 0x0374 frame. Skipped");
+    return;
+  }
+  int min_cell_id = this->aggregated_data_.bms_data.min_voltage_cell;
+
+  message.MinVoltageCellId[0] = min_cell_id + 48;
+
+  while (min_cell_id >= 10) {
+    min_cell_id /= 10;
+  }
+  // would break and display garbage if 'min_cell_id' would be >= 100
+  message.MinVoltageCellId[1] = min_cell_id + 48;
+
+  auto *ptr = reinterpret_cast<uint8_t *>(&message);
+  this->canbus_->send_data(0x0374, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
+}
+// Victron
+// max voltage cell id
+void BmsToInverter::send_frame_0x0375_() {
+  static CanMessage0x0375 message{};
+
+  if (std::isnan(this->aggregated_data_.bms_data.max_voltage_cell)) {
+    ESP_LOGW(TAG, "Not all sensors are available. Unable to populate 0x0375 frame. Skipped");
+    return;
+  }
+  int max_cell_id = this->aggregated_data_.bms_data.max_voltage_cell;
+
+  message.MaxVoltageCellId[0] = max_cell_id + 48;
+
+  while (max_cell_id >= 10) {
+    max_cell_id /= 10;
+  }
+  // would break and display garbage if 'max_cell_id' would be >= 100
+  message.MaxVoltageCellId[1] = max_cell_id + 48;
+
+  auto *ptr = reinterpret_cast<uint8_t *>(&message);
+  this->canbus_->send_data(0x0375, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
+}
+// Victron
+// min temperatur sensor id
+void BmsToInverter::send_frame_0x0376_() {
+  static CanMessage0x0376 message{};
+  message.MinTempertaurSensorId[0] = '0';
+
+  auto *ptr = reinterpret_cast<uint8_t *>(&message);
+  this->canbus_->send_data(0x0376, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
+}
+// Victron
+// max temperatur sensor id
+void BmsToInverter::send_frame_0x0377_() {
+  static CanMessage0x0377 message{};
+  message.MaxTempertaurSensorId[0] = '0';
+
+  auto *ptr = reinterpret_cast<uint8_t *>(&message);
+  this->canbus_->send_data(0x0377, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
+}
+// Pylon + | Victron
+// capacity
+void BmsToInverter::send_frame_0x0379_() {
+  static CanMessage0x0379 message{};
+
+  if (std::isnan(this->aggregated_data_.bms_data.total_capacity)) {
+    ESP_LOGW(TAG, "Not all sensors are available. Unable to populate 0x0379 frame. Skipped");
+    return;
+  }
+  message.NominalCapacity = this->aggregated_data_.bms_data.total_capacity;
+
+  auto *ptr = reinterpret_cast<uint8_t *>(&message);
+  this->canbus_->send_data(0x0379, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
+}
+// Vitron
+// ProduktIdentification
+void BmsToInverter::send_frame_0x0382_() {
+  static CanMessage0x0382 message{};
+  memcpy(message.ProduktIdentification, this->aggregated_data_.user_control_values.name.c_str(), 8);
+
+  auto *ptr = reinterpret_cast<uint8_t *>(&message);
+  this->canbus_->send_data(0x0382, false, false, std::vector<uint8_t>(ptr, ptr + sizeof message));
+}
 
 }  // namespace bms_to_inverter
 }  // namespace esphome

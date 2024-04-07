@@ -83,6 +83,7 @@
     "string_view": "cpp",
     "*.ipp": "cpp",
     "coroutine": "cpp",
-    "future": "cpp"
+    "future": "cpp",
+    "condition_variable": "cpp"
   }
 }

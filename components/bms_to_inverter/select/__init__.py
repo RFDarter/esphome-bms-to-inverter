@@ -19,18 +19,21 @@ CODEOWNERS = ["@rfdarter"]
 
 CONF_DEBUG_CHARGE_STATUS = "debug_charge_status"
 CONF_USER_CHARGE_LOGIC = "user_charge_logic"
+CONF_USER_CAN_PROTOCOL = "user_can_protocol"
 
-DEBUG_CHARGE_STATUS_OPTIONS = ["Auto", "Wait", "Bulk", "Absobtion", "Float"]
-CHARGE_LOGIC_OPTIONS = ["rebulk voltage", "float time"]
-
+DEBUG_CHARGE_STATUS_OPTIONS = ["AUTO", "WAIT", "BULK", "ABSORBTION", "FLOAT"]
+CHARGE_LOGIC_OPTIONS = [
+    "Rebulk voltage | Absorbtion Time",
+    "Rebulk voltage | Absorbtion Cut-Off Current",
+    "Bulk once per day | Absorbtion Time",
+    "Bulk once per day | AAbsorbtion Cut-Off Current",
+]
+CAN_PROTOCOL_OPTIONS = ["PYLON 1.2", "PYLON +", "SMA", "VICTRON"]
 BmsToInverterSelect = bms_to_inverter_ns.class_(
     "BmsToInverterSelect", select.Select, cg.Component
 )
 
-SELECTS = {
-    CONF_DEBUG_CHARGE_STATUS,
-    CONF_USER_CHARGE_LOGIC,
-}
+SELECTS = {CONF_DEBUG_CHARGE_STATUS, CONF_USER_CHARGE_LOGIC, CONF_USER_CAN_PROTOCOL}
 
 BMS_TO_INVERTER_SELECT_SCHEMA = select.SELECT_SCHEMA.extend(
     {
@@ -58,14 +61,22 @@ CONFIG_SCHEMA = cv.Schema(
                 cv.Optional(CONF_INITIAL_OPTION, default="Auto"): cv.string_strict,
             }
         ),
-        cv.Optional(CONF_USER_CHARGE_LOGIC): BMS_TO_INVERTER_SELECT_SCHEMA.extend(
+        cv.Required(CONF_USER_CHARGE_LOGIC): BMS_TO_INVERTER_SELECT_SCHEMA.extend(
             {
                 cv.Optional(CONF_OPTIONS, default=CHARGE_LOGIC_OPTIONS): cv.All(
                     cv.ensure_list(cv.string_strict), cv.Length(min=1)
                 ),
                 cv.Optional(
-                    CONF_INITIAL_OPTION, default="rebulk voltage"
+                    CONF_INITIAL_OPTION, default="Rebulk voltage | Absorbtion Time"
                 ): cv.string_strict,
+            }
+        ),
+        cv.Required(CONF_USER_CAN_PROTOCOL): BMS_TO_INVERTER_SELECT_SCHEMA.extend(
+            {
+                cv.Optional(CONF_OPTIONS, default=CAN_PROTOCOL_OPTIONS): cv.All(
+                    cv.ensure_list(cv.string_strict), cv.Length(min=1)
+                ),
+                cv.Optional(CONF_INITIAL_OPTION, default="PYLON 1.2"): cv.string_strict,
             }
         ),
     }
